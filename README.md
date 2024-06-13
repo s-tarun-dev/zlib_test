@@ -7,7 +7,7 @@ This repository contains essential code to test different versions of zlib, the 
 
 - Window size: 16 kB (This is the amount of the input file compressed at a given instance of time)
 - Compression level: Z_DEFAULT_COMPRESSION
-- Compression strategy: Default (Huffman Encoding + LZ77)
+- Compression strategy: Z_DEFAULT_STRATEGY
 - Compression algorithm: deflate
 - Timing unit: Milliseconds
 
@@ -28,4 +28,9 @@ Once the object file is created, run the following command:
 ```./test path/to/target/file```
 
 Within this repository, a sample home.html file is provided to test the compression. 
+
+## Notes
+
+- If an error ```Error opening output file``` occurs, run the exection command with sudo privilege or check the path.
+- To decompress a file, uncomment the commented code in main and vice versa. The command is *./test <compress | decompress> source_file destination_file*
 
