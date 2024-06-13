@@ -7,8 +7,8 @@ This repository contains essential code to test different versions of zlib, the 
 
 - Window size: 16 kB (This is the amount of the input file compressed at a given instance of time)
 - Compression level: Z_DEFAULT_COMPRESSION
-- Compression strategy: Z_DEFAULT_STRATEGY
-- Compression algorithm: deflate
+- Compression algorithm: DEFLATE
+- Compression strategy: Huffman Encoding + LZ77 (default)
 - Timing unit: Milliseconds
 
 ## Setting up the project
