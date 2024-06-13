@@ -19,11 +19,11 @@ To setup the project,
 - Clone the project into your local system
 - Navigate to the folder (*zlib_test*)
 - Make sure that CPP compiler(preferably g++) is installed in your system.
-- Run ```g++ test.cpp -o test -I./<zlib-1.2.11/zlib-1.3.1>/include -L./<zlib-1.2.11/zlib-1.3.1>/lib -lz -std=c++11``` to create the object file. (Choose any one of the zlib versions, as noted in the angle brackets)
+- Run ```g++ test.cpp -o test -I./<zlib-1.2.11/zlib-1.3.1>/include -L./<zlib-1.2.11/zlib-1.3.1>/lib -lz -std=c++11``` to create the executable file. (Choose any one of the zlib versions, as noted in the angle brackets)
 
 ## Usage
 
-Once the object file is created, run the following command: 
+Once the executable file is created, run the following command: 
 
 ```./test path/to/target/file```
 
