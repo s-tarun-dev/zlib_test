@@ -200,8 +200,7 @@ int main(int argc, char* argv[]){
 	struct timeval wall_start, wall_end;
 
 	string input_file = argv[1];
-	int found = input_file.find('.');
-	string output_file = (input_file.substr(0, input_file.size() - found - 1)).append("_compressed").append(".zlib");
+	string output_file = "compressed.zlib";
 
 	auto start = high_resolution_clock::now();
 	cpu_usage(usage_start);
@@ -217,8 +216,6 @@ int main(int argc, char* argv[]){
 	cout << "------------" << endl;
 	cout << "Time taken to compress: " << delta.count() << " milliseconds" << endl;
 	cout << "------------" << endl << endl;
-
-	// cout << "Compressed " << input_file << " as " << output_file << " in the current directory" << endl;
 
 	return 0;
 }
