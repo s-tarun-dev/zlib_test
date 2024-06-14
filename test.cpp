@@ -6,7 +6,7 @@
 #include<sys/time.h>
 #include<zlib.h>
 
-#define WINDOW 16384 //16 kb context window
+#define WINDOW 16384 
 
 using namespace std;
 using namespace std::chrono;
@@ -50,7 +50,7 @@ void compress_file(const string& input_file, const string& output_file){
 
 	vector<char> buffer;
 	vector<char> chunk(WINDOW);
-	vector<char> compressed_chunk(WINDOW * 2);
+	vector<char> compressed_chunk(WINDOW);
 
 	z_stream stream;
 	memset(&stream, 0, sizeof(stream));
@@ -59,25 +59,36 @@ void compress_file(const string& input_file, const string& output_file){
 		cerr << "deflateInit failed" << endl;
 		exit(1);
 	}
+
+	int ret = 0;
 	
 	while(infile.read(chunk.data(), chunk.size()) || infile.gcount() > 0){
 		stream.next_in = reinterpret_cast<Bytef*>(chunk.data());
 		stream.avail_in = infile.gcount();
 
-		do{
-			stream.next_out = reinterpret_cast<Bytef*>(compressed_chunk.data());
-			stream.avail_out = compressed_chunk.size();
+		stream.next_out = reinterpret_cast<Bytef*>(compressed_chunk.data());
+		stream.avail_out = compressed_chunk.size();
 
-			int ret = deflate(&stream, infile.eof() ? Z_FINISH : Z_NO_FLUSH);
+		ret = deflate(&stream, infile.eof() ? Z_FINISH : Z_NO_FLUSH);
 
-			if(ret == Z_STREAM_ERROR){
-				cerr << "deflate failed";
-				deflateEnd(&stream);
-				exit(1);
-			}
-			buffer.insert(buffer.end(), compressed_chunk.data(), compressed_chunk.data() + compressed_chunk.size() - stream.avail_out);
-		}while(stream.avail_out == 0);
+		if(ret < 0){
+			cerr << "deflate failed";
+			deflateEnd(&stream);
+			exit(1);
+		} 
+		buffer.insert(buffer.end(), compressed_chunk.data(), compressed_chunk.data() + compressed_chunk.size() - stream.avail_out);
 	}
+
+	do{
+		stream.next_out = reinterpret_cast<Bytef*>(compressed_chunk.data());
+		stream.avail_out = compressed_chunk.size();
+		ret = deflate(&stream, Z_FINISH);
+		if(ret < 0){
+			cout << "Error while flushing remaining data" << endl;
+			exit(1);
+		}
+		buffer.insert(buffer.end(), compressed_chunk.data(), compressed_chunk.data() + compressed_chunk.size() - stream.avail_out);
+	}while(ret != Z_STREAM_END); // Ensures remaining bytes from input file are not left uncompressed
 
 	deflateEnd(&stream);
 	infile.close();
@@ -127,7 +138,7 @@ void decompress_file(const string& input_file, const string& output_file){
 	stream.next_in = reinterpret_cast<Bytef*>(compressed_data.data());
 	stream.avail_in = compressed_data.size();
 
-	int result;
+	int result = 0;
 
 	do{
 		stream.next_out = reinterpret_cast<Bytef*>(decompressed_data.data() + stream.total_out);
@@ -196,26 +207,42 @@ int main(int argc, char* argv[]){
 		cout << "Usage: " << argv[0] << "<input_file>" << endl;
 	}
 
-	struct rusage usage_start, usage_end;
-	struct timeval wall_start, wall_end;
+	struct rusage compression_usage_start, compression_usage_end, decompression_usage_start, decompression_usage_end;
+	struct timeval compression_wall_start, compression_wall_end, decompression_wall_start, decompression_wall_end;
 
 	string input_file = argv[1];
 	string output_file = "compressed.zlib";
 
 	auto start = high_resolution_clock::now();
-	cpu_usage(usage_start);
-	wall_time(wall_start);
-	compress_file(input_file, output_file);
-	auto stop = high_resolution_clock::now();
-	cpu_usage(usage_end);
-	wall_time(wall_end);
+	cpu_usage(compression_usage_start);
+	wall_time(compression_wall_start);
 
-	print_cpu_usage(usage_start, usage_end, wall_start, wall_end);
+	compress_file(input_file, output_file);
+
+	auto stop = high_resolution_clock::now();
+	cpu_usage(compression_usage_end);
+	wall_time(compression_wall_end);
+
+	cout << "----Statistics for compression process----" << endl << endl;
+	print_cpu_usage(compression_usage_start, compression_usage_end, compression_wall_start, compression_wall_end);
 
 	auto delta = duration_cast<milliseconds> (stop - start);
-	cout << "------------" << endl;
-	cout << "Time taken to compress: " << delta.count() << " milliseconds" << endl;
-	cout << "------------" << endl << endl;
+	cout << "Time taken to compress: " << delta.count() << " milliseconds" << endl << endl;
 
+	auto start2 = high_resolution_clock::now();
+	cpu_usage(decompression_usage_start);
+	wall_time(decompression_wall_start);
+
+	decompress_file(output_file, input_file);
+
+	auto stop2 = high_resolution_clock::now();
+	cpu_usage(decompression_usage_end);
+	wall_time(decompression_wall_end);
+	
+	cout << "----Statistics for decompression process----" << endl << endl;
+	print_cpu_usage(decompression_usage_start, decompression_usage_end, decompression_wall_start, decompression_wall_end);
+
+	auto delta2 = duration_cast<milliseconds> (stop2 - start2);
+	cout << "Time taken to decompress: " << delta2.count() << " milliseconds" << endl << endl;
 	return 0;
 }
