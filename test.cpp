@@ -6,7 +6,7 @@
 #include<sys/time.h>
 #include<zlib.h>
 
-#define WINDOW 16384 
+#define WINDOW 16834
 
 using namespace std;
 using namespace std::chrono;
@@ -55,8 +55,8 @@ void compress_file(const string& input_file, const string& output_file){
 	z_stream stream;
 	memset(&stream, 0, sizeof(stream));
 
-	if(deflateInit(&stream, Z_DEFAULT_COMPRESSION) != Z_OK){
-		cerr << "deflateInit failed" << endl;
+	if(deflateInit2(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, MAX_WBITS + 16, 8, Z_DEFAULT_STRATEGY) != Z_OK){
+		cerr << "deflateInit2 failed" << endl;
 		exit(1);
 	}
 
@@ -130,8 +130,8 @@ void decompress_file(const string& input_file, const string& output_file){
 	z_stream stream;
 	memset(&stream, 0, sizeof(stream));
 
-	if(inflateInit(&stream) != Z_OK){
-		cerr << "inflateInit failed" << endl;
+	if(inflateInit2(&stream, MAX_WBITS + 16) != Z_OK){
+		cerr << "inflateInit2 failed" << endl;
 		exit(1);
 	}
 
@@ -211,7 +211,7 @@ int main(int argc, char* argv[]){
 	struct timeval compression_wall_start, compression_wall_end, decompression_wall_start, decompression_wall_end;
 
 	string input_file = argv[1];
-	string output_file = "compressed.zlib";
+	string output_file = "compressed.gz";
 
 	auto start = high_resolution_clock::now();
 	cpu_usage(compression_usage_start);
