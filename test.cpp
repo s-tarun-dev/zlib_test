@@ -55,7 +55,7 @@ void compress_file(const string& input_file, const string& output_file){
 	z_stream stream;
 	memset(&stream, 0, sizeof(stream));
 
-	if(deflateInit2(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, MAX_WBITS + 16, 8, Z_DEFAULT_STRATEGY) != Z_OK){
+	if(deflateInit2(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, MAX_WBITS + 16, 8, Z_DEFAULT_STRATEGY) != Z_OK){ 
 		cerr << "deflateInit2 failed" << endl;
 		exit(1);
 	}
@@ -110,22 +110,22 @@ void compress_file(const string& input_file, const string& output_file){
 void decompress_file(const string& input_file, const string& output_file){
 	ifstream infile(input_file, ios::binary | ios::ate);
 	if(!infile.is_open()){
-		cerr << "Error opening input file" << endl;
+		cerr << "Error opening input_file" << endl;
+		exit(1);
+	}
+
+	ofstream outfile(output_file, ios::binary | ios::ate);
+	if(!outfile.is_open()){
+		cerr << "Error opening output file" << endl;
 		exit(1);
 	}
 
 	streamsize compressed_size = infile.tellg();
 	infile.seekg(0, ios::beg);
 
-	vector<char> compressed_data(compressed_size);
-	if(!infile.read(compressed_data.data(), compressed_size)){
-		cerr << "Error reading input file" << endl;
-		exit(1);
-	}
-
-	infile.close();
-
-	vector<char> decompressed_data(compressed_size * 2);
+	vector<char> buffer;
+	vector<char> chunk(WINDOW);
+	vector<char> decompressed_chunk(WINDOW); 
 
 	z_stream stream;
 	memset(&stream, 0, sizeof(stream));
@@ -135,43 +135,34 @@ void decompress_file(const string& input_file, const string& output_file){
 		exit(1);
 	}
 
-	stream.next_in = reinterpret_cast<Bytef*>(compressed_data.data());
-	stream.avail_in = compressed_data.size();
+	int ret = 0;
+	size_t decompressed_bytes = 0;
 
-	int result = 0;
+	while(infile.read(chunk.data(), chunk.size()) || infile.gcount() > 0){
+		stream.next_in = reinterpret_cast<Bytef*>(chunk.data());
+		stream.avail_in = infile.gcount();
+		do{
+			stream.next_out = reinterpret_cast<Bytef*>(decompressed_chunk.data());
+			stream.avail_out = decompressed_chunk.size();
 
-	do{
-		stream.next_out = reinterpret_cast<Bytef*>(decompressed_data.data() + stream.total_out);
-		stream.avail_out = decompressed_data.size() - stream.total_out;
-
-		result = inflate(&stream, Z_FINISH);
-
-		if(result == Z_STREAM_ERROR || result == Z_DATA_ERROR || result == Z_MEM_ERROR){
-			cerr << "inflate failed with error code: " << result << endl;
-			exit(1);
-		}
-
-		if(stream.avail_out == 0){
-			decompressed_data.resize(decompressed_data.size() * 2);
-		}
-	}while(result != Z_STREAM_END);
-	
-	decompressed_data.resize(stream.total_out);
-	inflateEnd(&stream);
-
-	ofstream outfile(output_file, ios::binary);
-
-	if(!outfile.is_open()){
-		cerr << "Error opening output file" << endl;
-		exit(1);
+			ret = inflate(&stream, infile.eof() ? Z_FINISH : Z_NO_FLUSH);
+		
+			if(ret == Z_STREAM_ERROR || ret == Z_DATA_ERROR || ret == Z_MEM_ERROR){
+				cerr << "inflate failed with error code " << ret << endl;
+				inflateEnd(&stream);
+				exit(1);
+			} 
+			decompressed_bytes = decompressed_chunk.size() - stream.avail_out;
+			outfile.write(reinterpret_cast<char*>(decompressed_chunk.data()), decompressed_bytes); 
+		}while(stream.avail_out == 0);
+		//If avail_out becomes 0, it indicates that the output buffer was not sufficient. Thus inflate is called again, which continues 
+		//from the last checkpoint and continues to decompress the remaining compressed data.
 	}
-	if(!outfile.write(decompressed_data.data(), decompressed_data.size())){
-		cerr << "Error writing to output file " << endl;
-		exit(1);
-	}
+
+	infile.close();
 	outfile.close();
-
 }
+
 
 int main(int argc, char* argv[]){
 	/*if(argc != 4){
@@ -233,7 +224,7 @@ int main(int argc, char* argv[]){
 	cpu_usage(decompression_usage_start);
 	wall_time(decompression_wall_start);
 
-	decompress_file(output_file, input_file);
+	decompress_file(output_file, "decompressed.txt");
 
 	auto stop2 = high_resolution_clock::now();
 	cpu_usage(decompression_usage_end);
