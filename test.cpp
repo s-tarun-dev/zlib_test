@@ -6,7 +6,7 @@
 #include<sys/time.h>
 #include<zlib.h>
 
-#define WINDOW 16834
+#define BUFFER_SIZE 16834
 
 using namespace std;
 using namespace std::chrono;
@@ -48,62 +48,59 @@ void compress_file(const string& input_file, const string& output_file){
 		exit(1);
 	}
 
-	vector<char> buffer;
-	vector<char> chunk(WINDOW);
-	vector<char> compressed_chunk(WINDOW);
-
-	z_stream stream;
-	memset(&stream, 0, sizeof(stream));
-
-	if(deflateInit2(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, MAX_WBITS + 16, 8, Z_DEFAULT_STRATEGY) != Z_OK){ 
-		cerr << "deflateInit2 failed" << endl;
-		exit(1);
-	}
-
-	int ret = 0;
-	
-	while(infile.read(chunk.data(), chunk.size()) || infile.gcount() > 0){
-		stream.next_in = reinterpret_cast<Bytef*>(chunk.data());
-		stream.avail_in = infile.gcount();
-
-		stream.next_out = reinterpret_cast<Bytef*>(compressed_chunk.data());
-		stream.avail_out = compressed_chunk.size();
-
-		ret = deflate(&stream, infile.eof() ? Z_FINISH : Z_NO_FLUSH);
-
-		if(ret < 0){
-			cerr << "deflate failed";
-			deflateEnd(&stream);
-			exit(1);
-		} 
-		buffer.insert(buffer.end(), compressed_chunk.data(), compressed_chunk.data() + compressed_chunk.size() - stream.avail_out);
-	}
-
-	do{
-		stream.next_out = reinterpret_cast<Bytef*>(compressed_chunk.data());
-		stream.avail_out = compressed_chunk.size();
-		ret = deflate(&stream, Z_FINISH);
-		if(ret < 0){
-			cout << "Error while flushing remaining data" << endl;
-			exit(1);
-		}
-		buffer.insert(buffer.end(), compressed_chunk.data(), compressed_chunk.data() + compressed_chunk.size() - stream.avail_out);
-	}while(ret != Z_STREAM_END); // Ensures remaining bytes from input file are not left uncompressed
-
-	deflateEnd(&stream);
-	infile.close();
-
-	ofstream outfile(output_file, ios::binary | ios::ate);
+	ofstream outfile(output_file, ios::binary);
 	if(!outfile.is_open()){
 		cerr << "Error opening output file" << endl;
 		exit(1);
 	}
 
-	if(!outfile.write(buffer.data(), buffer.size())){
-		cerr << "Error writing to output file";
+	infile.seekg(0, ios::end);
+	int input_size = infile.tellg();
+	cout << "Input file size: " << input_size << " B\n" << endl;
+	infile.seekg(0, ios::beg);
+
+	vector<char> buffer;
+	vector<char> chunk(BUFFER_SIZE);
+	vector<char> compressed_chunk(BUFFER_SIZE);
+
+	z_stream stream;
+	memset(&stream, 0, sizeof(stream));
+
+	if(deflateInit2(&stream, 6, Z_DEFLATED, MAX_WBITS + 16, 8, Z_DEFAULT_STRATEGY) != Z_OK){ 
+		cerr << "deflateInit2 failed" << endl;
 		exit(1);
 	}
 
+	int ret = 0, total = 0, compressed_bytes = 0;
+
+	while(infile.read(chunk.data(), chunk.size()) || infile.gcount() > 0){
+		stream.next_in = reinterpret_cast<Bytef*>(chunk.data());
+		stream.avail_in = infile.gcount();
+		do{
+			stream.next_out = reinterpret_cast<Bytef*>(compressed_chunk.data());
+			stream.avail_out = compressed_chunk.size();
+
+			ret = deflate(&stream, infile.eof() ? Z_FINISH : Z_NO_FLUSH);
+		
+			if(ret == Z_STREAM_ERROR || ret == Z_DATA_ERROR || ret == Z_MEM_ERROR){
+				cerr << "inflate failed with error code " << ret << endl;
+				deflateEnd(&stream);
+				exit(1);
+			} 
+			compressed_bytes = compressed_chunk.size() - stream.avail_out;
+			total = total + compressed_bytes;
+			outfile.write(reinterpret_cast<char*>(compressed_chunk.data()), compressed_bytes); 
+		}while(stream.avail_out == 0);
+		//If avail_out becomes 0, it indicates that the output buffer was not sufficient. Thus deflate is called again, which continues 
+		//from the last checkpoint and continues to decompress the remaining compressed data.
+	}
+
+	cout << "----Statistics for compression process----" << endl << endl;
+	cout << "COMPRESSED FILE SIZE: " << total << " B" << endl;
+	cout << "Compression Ratio: " << (input_size / total) << endl << endl;
+
+	deflateEnd(&stream);
+	infile.close();
 	outfile.close();
 }
 
@@ -124,8 +121,8 @@ void decompress_file(const string& input_file, const string& output_file){
 	infile.seekg(0, ios::beg);
 
 	vector<char> buffer;
-	vector<char> chunk(WINDOW);
-	vector<char> decompressed_chunk(WINDOW); 
+	vector<char> chunk(BUFFER_SIZE);
+	vector<char> decompressed_chunk(BUFFER_SIZE); 
 
 	z_stream stream;
 	memset(&stream, 0, sizeof(stream));
@@ -135,7 +132,7 @@ void decompress_file(const string& input_file, const string& output_file){
 		exit(1);
 	}
 
-	int ret = 0;
+	int ret = 0, total = 0;
 	size_t decompressed_bytes = 0;
 
 	while(infile.read(chunk.data(), chunk.size()) || infile.gcount() > 0){
@@ -153,11 +150,14 @@ void decompress_file(const string& input_file, const string& output_file){
 				exit(1);
 			} 
 			decompressed_bytes = decompressed_chunk.size() - stream.avail_out;
+			total = total + decompressed_bytes;
 			outfile.write(reinterpret_cast<char*>(decompressed_chunk.data()), decompressed_bytes); 
 		}while(stream.avail_out == 0);
 		//If avail_out becomes 0, it indicates that the output buffer was not sufficient. Thus inflate is called again, which continues 
 		//from the last checkpoint and continues to decompress the remaining compressed data.
 	}
+	cout << "----Statistics for decompression process----" << endl << endl;
+	cout << "TOTAL DECOMPRESSED SIZE: " << total << " B" << endl << endl;
 
 	infile.close();
 	outfile.close();
@@ -165,44 +165,15 @@ void decompress_file(const string& input_file, const string& output_file){
 
 
 int main(int argc, char* argv[]){
-	/*if(argc != 4){
-		cout << "Usage: " << argv[0] << "<compress|decompress> <input_file> <output_file>" << endl;
-		return 1;
-	}
-
-	string input_file = argv[2];
-	string output_file = argv[3];
-	string mode = argv[1];
-
-	if(mode == "compress"){
-		auto start = high_resolution_clock::now();
-		compress_file(input_file, output_file);
-		auto stop = high_resolution_clock::now();
-
-		auto delta = duration_cast<milliseconds> (stop - start);
-		cout << "------------" << endl;
-		cout << "Time taken to compress: " << delta.count() << " ms" << endl;
-		cout << "------------" << endl;
-	}
-	else if(mode == "decompress"){
-		decompress_file(input_file, output_file);
-	}
-	else{
-		cerr << "Invalid mode of operation" << endl;
-		exit(1);
-	} */
-
-	// Proceeding only with compressinon
-
 	if(argc != 2){
-		cout << "Usage: " << argv[0] << "<input_file>" << endl;
+		cout << "Usage: " << argv[0] << " <input_file>" << endl;
 	}
 
 	struct rusage compression_usage_start, compression_usage_end, decompression_usage_start, decompression_usage_end;
 	struct timeval compression_wall_start, compression_wall_end, decompression_wall_start, decompression_wall_end;
 
 	string input_file = argv[1];
-	string output_file = "compressed.gz";
+	string output_file = input_file + ".gz";
 
 	auto start = high_resolution_clock::now();
 	cpu_usage(compression_usage_start);
@@ -214,7 +185,7 @@ int main(int argc, char* argv[]){
 	cpu_usage(compression_usage_end);
 	wall_time(compression_wall_end);
 
-	cout << "----Statistics for compression process----" << endl << endl;
+	
 	print_cpu_usage(compression_usage_start, compression_usage_end, compression_wall_start, compression_wall_end);
 
 	auto delta = duration_cast<milliseconds> (stop - start);
@@ -230,7 +201,6 @@ int main(int argc, char* argv[]){
 	cpu_usage(decompression_usage_end);
 	wall_time(decompression_wall_end);
 	
-	cout << "----Statistics for decompression process----" << endl << endl;
 	print_cpu_usage(decompression_usage_start, decompression_usage_end, decompression_wall_start, decompression_wall_end);
 
 	auto delta2 = duration_cast<milliseconds> (stop2 - start2);
