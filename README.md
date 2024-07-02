@@ -1,14 +1,15 @@
 # zlib_test
 
 ## Introduction
-This repository contains essential code to test different versions of zlib, the core compression utility used in gzip. 
+This repository contains essential code to test different versions of zlib, the core compression utility used in gzip. <br/>
+<i><b>Update:</b></i> The current test file compresses a file as .gz format, enabling gzip support.
 
 ## Parameters and Units
 
-- Window size: 16 kB (This is the amount of the input file compressed at a given instance of time)
+- Buffer size: 16 kB 
 - Compression level: Z_DEFAULT_COMPRESSION
-- Compression algorithm: DEFLATE
-- Compression strategy: Huffman Encoding + LZ77 (default)
+- Compression algorithm: deflateInit2
+- Compression strategy: Z_DEFAULT_STRATEGY
 - Timing unit: Milliseconds
 
 ## Setting up the project
@@ -32,5 +33,3 @@ Within this repository, a sample home.html file is provided to test the compress
 ## Notes
 
 - If an error ```Error opening output file``` occurs, run the exection command with sudo privilege or check the path.
-- To decompress a file, uncomment the commented code in main and vice versa. The command is *./test <compress | decompress> source_file destination_file*
-
