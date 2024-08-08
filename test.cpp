@@ -23,7 +23,7 @@ void wall_time(struct timeval& time){
 	gettimeofday(&time, nullptr);
 }
 
-void print_cpu_usage(const struct rusage& usage_start, const struct rusage& usage_end, const struct timeval& wall_start, const struct timeval& wall_end){
+void print_cpu_usage(int mode, const struct rusage& usage_start, const struct rusage& usage_end, const struct timeval& wall_start, const struct timeval& wall_end){
     double user_time_start = usage_start.ru_utime.tv_sec * 1000.0 + usage_start.ru_utime.tv_usec / 1000.0;
     double system_time_start = usage_start.ru_stime.tv_sec * 1000.0 + usage_start.ru_stime.tv_usec / 1000.0;
 
@@ -41,8 +41,14 @@ void print_cpu_usage(const struct rusage& usage_start, const struct rusage& usag
     double total_cpu_time = user_time + system_time;
 	double cpu_usage_percentage = (total_cpu_time / wall_time) * 100.0;
 
-    cout << "Total CPU time: " << total_cpu_time << " milliseconds" << endl;
-	cout << "CPU Utilization: " << cpu_usage_percentage << " %" << endl;
+	if(mode == 0){
+		cout << "Total CPU time for overall compression: " << total_cpu_time << " milliseconds" << endl;
+		cout << "CPU Utilization by overall compression: " << cpu_usage_percentage << " %" << endl;
+	} else{
+		cout << "Total CPU time for overall decompression: " << total_cpu_time << " milliseconds" << endl;
+		cout << "CPU Utilization by overall decompression: " << cpu_usage_percentage << " %" << endl;
+	}
+    
 }
 
 void compress_file(const string& input_file, const string& output_file, int level){
@@ -97,7 +103,11 @@ void compress_file(const string& input_file, const string& output_file, int leve
 				exit(1);
 			} 
 			gettimeofday(&stop, nullptr);
-			totaltime = totaltime + (stop.tv_sec - start.tv_sec) + (stop.tv_usec - start.tv_usec) / 1000.0;
+	
+			double elapsed_time = (stop.tv_sec - start.tv_sec) * 1000.0 + (stop.tv_usec - start.tv_usec) / 1000.0;
+
+			totaltime += elapsed_time;
+
 			compressed_bytes = compressed_chunk.size() - stream.avail_out;
 			total = total + compressed_bytes;
 			outfile.write(reinterpret_cast<char*>(compressed_chunk.data()), compressed_bytes); 
@@ -109,8 +119,8 @@ void compress_file(const string& input_file, const string& output_file, int leve
 	cout << "----Statistics for compression process----" << endl << endl;
 	cout << "COMPRESSED FILE SIZE: " << total << " B" << endl;
 	cout << "Compression Ratio: " << (input_size / total) << endl << endl;
-	cout << "Time Taken by deflate: " << totaltime << " ms" << endl << endl;
-
+	cout << "Time Taken by deflate: " << totaltime << " milliseconds" << endl << endl;
+	
 	deflateEnd(&stream);
 	infile.close();
 	outfile.close();
@@ -204,10 +214,11 @@ int main(int argc, char* argv[]){
 	cpu_usage(compression_usage_end);
 	wall_time(compression_wall_end);
 
-	print_cpu_usage(compression_usage_start, compression_usage_end, compression_wall_start, compression_wall_end);
+	print_cpu_usage(0, compression_usage_start, compression_usage_end, compression_wall_start, compression_wall_end);
 
 	auto delta = duration_cast<milliseconds> (stop - start);
-	cout << "Time taken for overall compression: " << delta.count() << " milliseconds" << endl << endl;
+	cout << "Time taken for overall compression: " << delta.count() << " milliseconds" << endl;
+
 	struct rusage usage;
 	getrusage(RUSAGE_SELF, &usage);
 	cout << "Maximum RSS for compression: " << usage.ru_maxrss << endl << endl;
@@ -222,7 +233,7 @@ int main(int argc, char* argv[]){
 	cpu_usage(decompression_usage_end);
 	wall_time(decompression_wall_end);
 	
-	print_cpu_usage(decompression_usage_start, decompression_usage_end, decompression_wall_start, decompression_wall_end);
+	print_cpu_usage(1, decompression_usage_start, decompression_usage_end, decompression_wall_start, decompression_wall_end);
 
 	auto delta2 = duration_cast<milliseconds> (stop2 - start2);
 	cout << "Time taken to decompress: " << delta2.count() << " milliseconds" << endl << endl;
